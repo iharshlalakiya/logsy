@@ -10,7 +10,7 @@ class Logsy:
         "DEBUG": COLOR_MAP["cyan"],
     }
 
-    def __init__(self, with_time=True, log_to_file=True, file_path="logs/app.log",use_color=True, custom_colors=None):
+    def __init__(self, with_time=True, log_to_file=True, file_path="logs/app.log",use_color=True, custom_colors=None, log_to_console=True):
 
         """
         Args:
@@ -27,6 +27,7 @@ class Logsy:
         self.file_path = file_path
         self.use_color = use_color
         self.colors = self.DEFAULT_COLORS.copy()
+        self.log_to_console = log_to_console
 
         if custom_colors:
             for level, color_name in custom_colors.items():
@@ -82,7 +83,8 @@ class Logsy:
         
         log_message = self._build_message(level, message)
 
-        print(log_message)
+        if self.log_to_console:
+            print(log_message)
 
         if self.log_to_file:
             with open(self.file_path, "a", encoding="utf-8") as f:
