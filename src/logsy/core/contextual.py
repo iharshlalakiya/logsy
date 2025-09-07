@@ -1,6 +1,9 @@
 import inspect
 import datetime
 import os
+import re
+import shutil
+import textwrap
 from .utils import COLOR_MAP
 class Logsy:
     DEFAULT_COLORS = {
@@ -10,7 +13,7 @@ class Logsy:
         "DEBUG": COLOR_MAP["cyan"],
     }
 
-    def __init__(self, with_time=True, log_to_file=True, file_path="logs/app.log",use_color=True, custom_colors=None, log_to_console=True):
+    def __init__(self, with_time=True, log_to_file=True, file_path="logs/app.log", use_color=True, custom_colors=None, log_to_console=True, table_view=False, table_title=None):
 
         """
         Args:
@@ -28,6 +31,11 @@ class Logsy:
         self.use_color = use_color
         self.colors = self.DEFAULT_COLORS.copy()
         self.log_to_console = log_to_console
+        self.table_view = table_view
+        self.table_title = table_title if table_view else None
+        self._header_printed = False
+
+        self._auto_column_widths = None
 
         if custom_colors:
             for level, color_name in custom_colors.items():
@@ -77,6 +85,162 @@ class Logsy:
         log_str = " ".join(parts)
         return self._apply_color(level, log_str)
     
+    def _get_terminal_width(self):
+        """Get terminal width with fallback."""
+        try:
+            return shutil.get_terminal_size().columns
+        except:
+            return 120  # Fallback width
+    
+    def _strip_ansi_codes(self, text):
+        """Remove ANSI color codes from text for accurate length calculation."""
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        return ansi_escape.sub('', text)
+    
+    def _calculate_optimal_widths(self):
+        """Calculate optimal column widths based on terminal size."""
+        if self._auto_column_widths:
+            return self._auto_column_widths
+            
+        terminal_width = self._get_terminal_width()
+        border_width = 13 if self.with_time else 10  # ┃ symbols and spaces
+        available_width = terminal_width - border_width
+        
+        # Minimum required widths
+        min_widths = {
+            "time": 19 if self.with_time else 0,  # "YYYY-MM-DD HH:MM:SS"
+            "level": 8,     # "WARNING"  
+            "file_line": 15, # "filename.py:123"
+            "message": 20   # Minimum message width
+        }
+        
+        # Calculate optimal distribution
+        if available_width < sum(min_widths.values()):
+            # Terminal too narrow, use minimums
+            self._auto_column_widths = min_widths
+        else:
+            # Distribute extra space intelligently
+            extra_space = available_width - sum(min_widths.values())
+            
+            # Priority: 70% to message, 20% to file_line, 10% to time
+            self._auto_column_widths = {
+                "time": min_widths["time"] + int(extra_space * 0.10) if self.with_time else 0,
+                "level": min_widths["level"],  # Keep level column fixed
+                "file_line": min_widths["file_line"] + int(extra_space * 0.20),
+                "message": min_widths["message"] + int(extra_space * 0.70)
+            }
+        
+        return self._auto_column_widths
+    
+    def _wrap_text(self, text, width):
+        """Wrap text to specified width, returning list of lines."""
+        if len(text) <= width:
+            return [text]
+        
+        # Use textwrap to handle word boundaries properly
+        wrapped_lines = textwrap.wrap(text, width=width, break_long_words=True, 
+                                    break_on_hyphens=True, expand_tabs=False)
+        return wrapped_lines if wrapped_lines else [text]
+    
+    def _print_table_header(self):
+        """Print table header with calculated column widths."""
+        widths = self._calculate_optimal_widths()
+        
+        # Calculate total width
+        border_chars = 13 if self.with_time else 10
+        total_width = sum(widths[k] for k in widths if k != 'time' or self.with_time) + border_chars
+        
+        # Title
+        if self.table_title:
+            print(self.table_title.center(total_width))
+        
+        # Top border
+        if self.with_time:
+            print(f"┏{'━'*widths['time']}┳{'━'*widths['level']}┳{'━'*widths['file_line']}┳{'━'*widths['message']}┓")
+        else:
+            print(f"┏{'━'*widths['level']}┳{'━'*widths['file_line']}┳{'━'*widths['message']}┓")
+        
+        # Header row
+        if self.with_time:
+            print(f"┃{'Time':^{widths['time']}}┃{'Level':^{widths['level']}}┃"
+                  f"{'File:Line':^{widths['file_line']}}┃{'Message':^{widths['message']}}┃")
+            # Header separator
+            print(f"┡{'━'*widths['time']}╇{'━'*widths['level']}╇{'━'*widths['file_line']}╇{'━'*widths['message']}┩")
+        else:
+            print(f"┃{'Level':^{widths['level']}}┃"
+                  f"{'File:Line':^{widths['file_line']}}┃{'Message':^{widths['message']}}┃")
+            # Header separator
+            print(f"┡{'━'*widths['level']}╇{'━'*widths['file_line']}╇{'━'*widths['message']}┩")
+    
+    def _print_table_row(self, level, message):
+        """Print one log entry in table format with automatic content wrapping."""
+        timestamp = self._get_timestamp() if self.with_time else ""
+        filename, line_number = self._get_context()
+        file_line = f"{filename}:{line_number}"
+        level_upper = level.upper()
+        
+        widths = self._calculate_optimal_widths()
+        
+        # Print header if not printed yet
+        if not self._header_printed:
+            self._print_table_header()
+            self._header_printed = True
+        
+        # Wrap content for each column
+        timestamp_lines = self._wrap_text(timestamp, widths["time"]) if timestamp else [""]
+        level_lines = self._wrap_text(level_upper, widths["level"])
+        file_line_lines = self._wrap_text(file_line, widths["file_line"])
+        message_lines = self._wrap_text(message, widths["message"])
+        
+        # Find the maximum number of lines needed
+        max_lines = max(
+            len(timestamp_lines) if timestamp else 1,
+            len(level_lines),
+            len(file_line_lines), 
+            len(message_lines)
+        )
+        
+        # Pad shorter columns with empty strings
+        while len(timestamp_lines) < max_lines:
+            timestamp_lines.append("")
+        while len(level_lines) < max_lines:
+            level_lines.append("")
+        while len(file_line_lines) < max_lines:
+            file_line_lines.append("")
+        while len(message_lines) < max_lines:
+            message_lines.append("")
+        
+        # Print each line of the row
+        for i in range(max_lines):
+            timestamp_content = timestamp_lines[i] if self.with_time else ""
+            level_content = level_lines[i]
+            file_line_content = file_line_lines[i]
+            message_content = message_lines[i]
+            
+            # Apply color to level content (only if it has content)
+            if level_content and i == 0:  # Only color the first line of level
+                colored_level = self._apply_color(level_upper, level_content)
+                level_padding = widths["level"] + (len(colored_level) - len(self._strip_ansi_codes(colored_level)))
+            else:
+                colored_level = level_content
+                level_padding = widths["level"]
+            
+            # Print the row
+            if self.with_time:
+                print(f"┃{timestamp_content:<{widths['time']}}┃{colored_level:<{level_padding}}┃"
+                      f"{file_line_content:<{widths['file_line']}}┃{message_content:<{widths['message']}}┃")
+            else:
+                print(f"┃{colored_level:<{level_padding}}┃"
+                      f"{file_line_content:<{widths['file_line']}}┃{message_content:<{widths['message']}}┃")
+    
+    def _print_table_footer(self):
+        """Print table bottom border."""
+        widths = self._calculate_optimal_widths()
+        if self.with_time:
+            print(f"└{'─'*widths['time']}┴{'─'*widths['level']}┴{'─'*widths['file_line']}┴{'─'*widths['message']}┘")
+        else:
+            print(f"└{'─'*widths['level']}┴{'─'*widths['file_line']}┴{'─'*widths['message']}┘")
+    
     def log(self, level, message):
 
         """Log message to console and optionally to file."""
@@ -84,7 +248,10 @@ class Logsy:
         log_message = self._build_message(level, message)
 
         if self.log_to_console:
-            print(log_message)
+            if self.table_view:
+                self._print_table_row(level, message)
+            else:
+                print(log_message)
 
         if self.log_to_file:
             with open(self.file_path, "a", encoding="utf-8") as f:
