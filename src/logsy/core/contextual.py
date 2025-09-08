@@ -4,7 +4,18 @@ import os
 import re
 import shutil
 import textwrap
+import weakref
 from .utils import COLOR_MAP
+
+# Global registry to track all active Logsy instances
+_active_loggers = weakref.WeakSet()
+
+def _cleanup_all_tables():
+    """Close all active table loggers."""
+    for logger in list(_active_loggers):
+        if logger.table_view and logger._header_printed and not logger._footer_printed:
+            logger._print_table_footer()
+
 class Logsy:
     DEFAULT_COLORS = {
         "INFO": COLOR_MAP["blue"],
@@ -14,7 +25,6 @@ class Logsy:
     }
 
     def __init__(self, with_time=True, log_to_file=True, file_path="logs/app.log", use_color=True, custom_colors=None, log_to_console=True, table_view=False, table_title=None):
-
         """
         Args:
             with_time (bool): include timestamp in logs.
@@ -24,7 +34,6 @@ class Logsy:
             custom_colors (dict): user-defined color codes for log levels.
                                   Example: {"INFO": "\033[94m"}
         """
-
         self.with_time = with_time
         self.log_to_file = log_to_file
         self.file_path = file_path
@@ -34,8 +43,9 @@ class Logsy:
         self.table_view = table_view
         self.table_title = table_title if table_view else None
         self._header_printed = False
-
+        self._footer_printed = False
         self._auto_column_widths = None
+        self._row_count = 0
 
         if custom_colors:
             for level, color_name in custom_colors.items():
@@ -44,34 +54,30 @@ class Logsy:
 
         if self.log_to_file:
             os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+            
+        # Register this instance for cleanup
+        if self.table_view:
+            _active_loggers.add(self)
 
     def _get_context(self):
-
         """Get file name and line number where the log was called."""
-
         frame = inspect.currentframe().f_back.f_back
         filename = frame.f_code.co_filename.split("/")[-1]
         line_number = frame.f_lineno
         return filename, line_number
     
     def _get_timestamp(self):
-
         """Return formatted timestamp."""
-
         return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     def _apply_color(self, level, message):
-
         """Apply ANSI color to console output."""
-
         if not self.use_color:
             return message
         return f"{self.colors.get(level.upper(), COLOR_MAP['reset'])}{message}{COLOR_MAP['reset']}"
     
     def _build_message(self, level, message):
-
         """Build the log string with timestamp, level, context, and message."""
-
         filename, line_number = self._get_context()
         parts = []
 
@@ -232,19 +238,25 @@ class Logsy:
             else:
                 print(f"┃{colored_level:<{level_padding}}┃"
                       f"{file_line_content:<{widths['file_line']}}┃{message_content:<{widths['message']}}┃")
+        
+        self._row_count += 1
     
     def _print_table_footer(self):
         """Print table bottom border."""
-        widths = self._calculate_optimal_widths()
-        if self.with_time:
-            print(f"└{'─'*widths['time']}┴{'─'*widths['level']}┴{'─'*widths['file_line']}┴{'─'*widths['message']}┘")
-        else:
-            print(f"└{'─'*widths['level']}┴{'─'*widths['file_line']}┴{'─'*widths['message']}┘")
+        if self.table_view and self._header_printed and not self._footer_printed:
+            widths = self._calculate_optimal_widths()
+            if self.with_time:
+                print(f"└{'─'*widths['time']}┴{'─'*widths['level']}┴{'─'*widths['file_line']}┴{'─'*widths['message']}┘")
+            else:
+                print(f"└{'─'*widths['level']}┴{'─'*widths['file_line']}┴{'─'*widths['message']}┘")
+            self._footer_printed = True
+    
+    def close_table(self):
+        """Manually close the table by printing the footer."""
+        self._print_table_footer()
     
     def log(self, level, message):
-
         """Log message to console and optionally to file."""
-        
         log_message = self._build_message(level, message)
 
         if self.log_to_console:
@@ -264,3 +276,26 @@ class Logsy:
     def warning(self, message): self.log("WARNING", message)
     def error(self, message): self.log("ERROR", message)
     def debug(self, message): self.log("DEBUG", message)
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - prints footer."""
+        self.close_table()
+        return False
+    
+    def __del__(self):
+        """Destructor - attempt to close table when object is garbage collected."""
+        try:
+            self.close_table()
+        except:
+            pass  # Ignore errors during cleanup
+
+# Try to register cleanup at module level
+try:
+    import atexit
+    atexit.register(_cleanup_all_tables)
+except:
+    pass  # If atexit fails, we still have other mechanisms
