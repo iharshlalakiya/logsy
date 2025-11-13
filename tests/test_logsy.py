@@ -3,9 +3,9 @@ import re
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
-
 from logsy.logger import Logsy
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 def test_console_logging(capsys):
     logger = Logsy(with_time=False, log_to_file=False, use_color=True, log_to_console=True)
@@ -52,8 +52,6 @@ def test_custom_colors(capsys):
     assert "\033[" in captured.out
     assert "Custom color info log" in captured.out
     assert "Custom color error log" in captured.out
-
-# ---------------- New Table Feature Tests ----------------
 
 def test_table_console_output(capsys):
     logger = Logsy(log_to_file=False, table_view=True, table_title="Test Table")
