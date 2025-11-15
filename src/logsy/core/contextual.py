@@ -231,20 +231,20 @@ class Logsy:
             print(self.table_title.center(total_width))
         
         if self.with_time:
-            print(f"┏{'━'*widths['time']}┳{'━'*widths['level']}┳{'━'*widths['file_line']}┳{'━'*widths['message']}┓")
+            print(f"+{'-'*widths['time']}+{'-'*widths['level']}+{'-'*widths['file_line']}+{'-'*widths['message']}+")
         else:
-            print(f"┏{'━'*widths['level']}┳{'━'*widths['file_line']}┳{'━'*widths['message']}┓")
+            print(f"+{'-'*widths['level']}+{'-'*widths['file_line']}+{'-'*widths['message']}+")
         
         if self.with_time:
-            print(f"┃{'Time':^{widths['time']}}┃{'Level':^{widths['level']}}┃"
-                  f"{'File:Line':^{widths['file_line']}}┃{'Message':^{widths['message']}}┃")
+            print(f"|{'Time':^{widths['time']}}|{'Level':^{widths['level']}}|"
+                  f"{'File:Line':^{widths['file_line']}}|{'Message':^{widths['message']}}|")
 
-            print(f"┡{'━'*widths['time']}╇{'━'*widths['level']}╇{'━'*widths['file_line']}╇{'━'*widths['message']}┩")
+            print(f"+{'-'*widths['time']}+{'-'*widths['level']}+{'-'*widths['file_line']}+{'-'*widths['message']}+")
         else:
-            print(f"┃{'Level':^{widths['level']}}┃"
-                  f"{'File:Line':^{widths['file_line']}}┃{'Message':^{widths['message']}}┃")
+            print(f"|{'Level':^{widths['level']}}|"
+                  f"{'File:Line':^{widths['file_line']}}|{'Message':^{widths['message']}}|")
 
-            print(f"┡{'━'*widths['level']}╇{'━'*widths['file_line']}╇{'━'*widths['message']}┩")
+            print(f"+{'-'*widths['level']}+{'-'*widths['file_line']}+{'-'*widths['message']}+")
     
     def print_table_row(self, level, message):
 
@@ -302,11 +302,11 @@ class Logsy:
                 level_padding = widths["level"]
             
             if self.with_time:
-                print(f"┃{timestamp_content:<{widths['time']}}┃{colored_level:<{level_padding}}┃"
-                      f"{file_line_content:<{widths['file_line']}}┃{message_content:<{widths['message']}}┃")
+                print(f"|{timestamp_content:<{widths['time']}}|{colored_level:<{level_padding}}|"
+                      f"{file_line_content:<{widths['file_line']}}|{message_content:<{widths['message']}}|")
             else:
-                print(f"┃{colored_level:<{level_padding}}┃"
-                      f"{file_line_content:<{widths['file_line']}}┃{message_content:<{widths['message']}}┃")
+                print(f"|{colored_level:<{level_padding}}|"
+                      f"{file_line_content:<{widths['file_line']}}|{message_content:<{widths['message']}}|")
     
     def print_table_footer(self):
 
@@ -316,9 +316,9 @@ class Logsy:
 
         widths = self.calculate_optimal_widths()
         if self.with_time:
-            print(f"└{'─'*widths['time']}┴{'─'*widths['level']}┴{'─'*widths['file_line']}┴{'─'*widths['message']}┘")
+            print(f"+{'-'*widths['time']}+{'-'*widths['level']}+{'-'*widths['file_line']}+{'-'*widths['message']}+")
         else:
-            print(f"└{'─'*widths['level']}┴{'─'*widths['file_line']}┴{'─'*widths['message']}┘")
+            print(f"+{'-'*widths['level']}+{'-'*widths['file_line']}+{'-'*widths['message']}+")
     
     def log(self, level, message):
 
